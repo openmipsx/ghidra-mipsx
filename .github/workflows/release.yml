@@ -40,10 +40,18 @@ jobs:
           unzip -q "$RUNNER_TEMP/$zip" -d "$RUNNER_TEMP"
           echo "GHIDRA_INSTALL_DIR=$RUNNER_TEMP/ghidra_${{ matrix.ghidra }}_PUBLIC" >> "$GITHUB_ENV"
 
+      # The Gradle build packages the .slaspec but does not compile it, so
+      # compile it first to ship the .sla rather than leave it to Ghidra.
+      - name: Compile SLEIGH
+        run: |
+          "$GHIDRA_INSTALL_DIR/support/sleigh" -a data/languages
+          test -f data/languages/mipsx.sla
+
       - name: Build extension
         run: |
           "$GHIDRA_INSTALL_DIR/support/gradle/gradlew"
           ls -l dist/
+          unzip -l dist/*.zip | grep -q 'data/languages/mipsx\.sla$'
 
       - uses: actions/upload-artifact@v7
         with:
