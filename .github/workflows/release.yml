@@ -1,0 +1,87 @@
+# Builds the extension for each supported Ghidra version and, on a v* tag,
+# publishes the zips as a GitHub release. Ghidra extensions only install into
+# the exact Ghidra version they were built against, hence one zip per version.
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ghidra: '12.2'
+            date: '20261016'
+            java: '25'
+          - ghidra: '12.1.4'
+            date: '20260921'
+            java: '21'
+          - ghidra: '12.0.4'
+            date: '20260303'
+            java: '21'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      # Ghidra 12.2 ships a Gradle wrapper; older versions need Gradle installed.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.1.0'
+
+      - name: Download Ghidra ${{ matrix.ghidra }}
+        run: |
+          zip=ghidra_${{ matrix.ghidra }}_PUBLIC_${{ matrix.date }}.zip
+          curl -fsSL -o "$RUNNER_TEMP/$zip" \
+            "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${{ matrix.ghidra }}_build/$zip"
+          unzip -q "$RUNNER_TEMP/$zip" -d "$RUNNER_TEMP"
+          echo "GHIDRA_INSTALL_DIR=$RUNNER_TEMP/ghidra_${{ matrix.ghidra }}_PUBLIC" >> "$GITHUB_ENV"
+
+      - name: Build extension
+        run: |
+          if [ -x "$GHIDRA_INSTALL_DIR/support/gradle/gradlew" ]; then
+            "$GHIDRA_INSTALL_DIR/support/gradle/gradlew"
+          else
+            gradle
+          fi
+          ls -l dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghidra-mipsx-ghidra_${{ matrix.ghidra }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
