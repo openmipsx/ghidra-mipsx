@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright 2026 Tim Retout <tim@retout.co.uk>
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!-- Calling convention for the SPA applications (docs/processor-es3890.md §7).
+     Stack pointer r29 and return address r31 are observed. Everything else is a
+     GUESS from register usage: arguments r4-r7 then stack, return value r2,
+     callee-saved r16-r22, reserved code base registers r22/r23/r24/r26 (and probably r25).
+     The stack argument offset (0) is not established. -->
+<compiler_spec>
+  <data_organization>
+    <pointer_size value="4"/>
+    <size_alignment_map>
+      <entry size="1" alignment="1"/>
+      <entry size="2" alignment="2"/>
+      <entry size="4" alignment="4"/>
+      <entry size="8" alignment="4"/>
+    </size_alignment_map>
+  </data_organization>
+
+  <stackpointer register="r29" space="ram"/>
+  <funcptr align="4"/>
+  <global>
+    <range space="ram"/>
+  </global>
+  <returnaddress>
+    <register name="r31"/>
+  </returnaddress>
+  <default_proto>
+    <prototype name="__stdcall" extrapop="0" stackshift="0">
+      <input>
+        <pentry minsize="1" maxsize="4">
+          <register name="r4"/>
+        </pentry>
+        <pentry minsize="1" maxsize="4">
+          <register name="r5"/>
+        </pentry>
+        <pentry minsize="1" maxsize="4">
+          <register name="r6"/>
+        </pentry>
+        <pentry minsize="1" maxsize="4">
+          <register name="r7"/>
+        </pentry>
+        <pentry minsize="1" maxsize="500" align="4">
+          <addr offset="0" space="stack"/>
+        </pentry>
+      </input>
+      <output>
+        <pentry minsize="1" maxsize="4">
+          <register name="r2"/>
+        </pentry>
+      </output>
+      <unaffected>
+        <register name="r16"/>
+        <register name="r17"/>
+        <register name="r18"/>
+        <register name="r19"/>
+        <register name="r20"/>
+        <register name="r21"/>
+        <register name="r22"/>
+        <register name="r23"/>
+        <register name="r24"/>
+        <register name="r25"/>
+        <register name="r26"/>
+        <register name="r29"/>
+      </unaffected>
+    </prototype>
+  </default_proto>
+</compiler_spec>

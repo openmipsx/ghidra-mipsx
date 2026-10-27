@@ -1,0 +1,407 @@
+# Copyright 2026 Tim Retout <tim@retout.co.uk>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SLEIGH specification for Stanford MIPS-X as implemented in the ESS ES3890
+# (used in the Sipura and Linksys SPA analogue telephone adapters and IP phones).
+#
+# Source of truth: docs/processor-es3890.md (section numbers "spec §x").
+# Bits are numbered from the least significant bit, as in that document.
+#
+# Addressing model: one byte-addressed ram space. The ISA's code addresses
+# (PC, branch displacements, jump targets, link values) are word addresses;
+# this spec converts them to byte addresses (x4) at every point of use.
+
+define endian=big;
+define alignment=4;
+
+define space ram      type=ram_space      size=4 default;
+define space register type=register_space size=4;
+
+define register offset=0x0 size=4 [
+	r0  r1  r2  r3  r4  r5  r6  r7  r8  r9  r10 r11 r12 r13 r14 r15
+	r16 r17 r18 r19 r20 r21 r22 r23 r24 r25 r26 r27 r28 r29 r30 r31
+];
+
+# pc holds the byte address (Ghidra's view). psw, md and the PC chain
+# (pcm4 read side, pcm1 write side) are the special registers of spec §6.
+define register offset=0x100 size=4 [ pc psw md pcm4 pcm1 ];
+
+# Context: code base word addresses held in r22, r23, r24 and r26, written by
+# the loader from the load directory (spec §8). 0 means "unknown": calls
+# through that register are then decoded as computed calls.
+define register offset=0x200 size=16 [ contextreg ];
+define context contextreg
+	base22 = (0,31)    noflow
+	base23 = (32,63)   noflow
+	base24 = (64,95)   noflow
+	base26 = (96,127)  noflow
+;
+
+define token instr(32)
+	ty      = (30,31)
+	op      = (27,29)
+	cond    = (27,29)
+	src1    = (22,26)
+	src1R   = (22,26)
+	src2    = (17,21)
+	src2R   = (17,21)
+	dest    = (12,16)
+	destR   = (12,16)
+	func    = (0,11)
+	func3   = (3,11)
+	spec    = (0,2)
+	tbit11  = (11,11)
+	tvec    = (3,10)
+	tlow    = (0,2)
+	shfn    = (7,11)
+	shb     = (4,6)
+	shd     = (0,3)
+	imm17   = (0,16) signed
+	off17   = (0,16) signed
+	sq      = (16,16)
+	disp16  = (0,15) signed
+;
+
+attach variables [ src1R src2R destR ] [
+	r0  r1  r2  r3  r4  r5  r6  r7  r8  r9  r10 r11 r12 r13 r14 r15
+	r16 r17 r18 r19 r20 r21 r22 r23 r24 r25 r26 r27 r28 r29 r30 r31
+];
+
+define pcodeop trap;
+define pcodeop restoreState;
+define pcodeop halt;
+
+#
+# Operand subtables
+#
+
+# Source registers: r0 reads as constant zero.
+RS1: src1R is src1R           { export src1R; }
+RS1: src1R is src1R & src1=0  { export 0:4; }
+RS2: src2R is src2R           { export src2R; }
+RS2: src2R is src2R & src2=0  { export 0:4; }
+
+# Branch target: word address branch + 2 + Disp (spec §4).
+BTarget: tgt is disp16 [ tgt = (inst_start + 4 * (2 + disp16)) & 0xffffffff; ] { export *:4 tgt; }
+
+# First instruction after the two delay slots.
+Skip: tgt is epsilon [ tgt = inst_start + 12; ] { export *:4 tgt; }
+
+# Link value: word address of the jspci + 3.
+Link: lnk is epsilon [ lnk = (inst_start >> 2) + 3; ] { export *[const]:4 lnk; }
+
+# Static jspci targets (byte addresses): r0, or a code base register whose
+# value the loader put in the context.
+JT0:  tgt is imm17 [ tgt = (imm17 * 4) & 0xffffffff; ]            { export *:4 tgt; }
+JT22: tgt is imm17 [ tgt = ((base22 + imm17) * 4) & 0xffffffff; ] { export *:4 tgt; }
+JT23: tgt is imm17 [ tgt = ((base23 + imm17) * 4) & 0xffffffff; ] { export *:4 tgt; }
+JT24: tgt is imm17 [ tgt = ((base24 + imm17) * 4) & 0xffffffff; ] { export *:4 tgt; }
+JT26: tgt is imm17 [ tgt = ((base26 + imm17) * 4) & 0xffffffff; ] { export *:4 tgt; }
+
+# Shift amount (spec §5): e = bbb*4 + index of the one-hot dddd; shown and
+# used as n = 32 - e.
+ShAmt: "#"^n is shb & shd=1 [ n = 32 - (shb * 4 + 0); ] { export *[const]:4 n; }
+ShAmt: "#"^n is shb & shd=2 [ n = 32 - (shb * 4 + 1); ] { export *[const]:4 n; }
+ShAmt: "#"^n is shb & shd=4 [ n = 32 - (shb * 4 + 2); ] { export *[const]:4 n; }
+ShAmt: "#"^n is shb & shd=8 [ n = 32 - (shb * 4 + 3); ] { export *[const]:4 n; }
+
+# Memory address: Reg(Src1) + SignExtend(Offset), bytes (spec §3).
+Addr: off17^"["^src1R^"]" is off17 & src1R & RS1 { local a:4 = RS1 + off17; export a; }
+
+#
+# Branches (TY = 00, spec §4)
+#
+
+BCond: "eq" is cond=1 & RS1 & RS2 { local t:1 = RS1 == RS2;  export t; }
+BCond: "ne" is cond=5 & RS1 & RS2 { local t:1 = RS1 != RS2;  export t; }
+BCond: "hs" is cond=2 & RS1 & RS2 { local t:1 = RS1 >= RS2;  export t; }
+BCond: "lo" is cond=6 & RS1 & RS2 { local t:1 = RS1 < RS2;   export t; }
+BCond: "lt" is cond=3 & RS1 & RS2 { local t:1 = RS1 s< RS2;  export t; }
+BCond: "ge" is cond=7 & RS1 & RS2 { local t:1 = RS1 s>= RS2; export t; }
+
+# Delay slots always execute; condition evaluated before them.
+:b^BCond src1R,src2R,BTarget is ty=0 & sq=0 & BCond & src1R & src2R & BTarget {
+	local t:1 = BCond;
+	delayslot(8);
+	if (t) goto BTarget;
+}
+
+# Squashing: delay slots execute only if taken.
+:b^BCond^"sq" src1R,src2R,BTarget is ty=0 & sq=1 & BCond & src1R & src2R & BTarget & Skip {
+	if (!BCond) goto Skip;
+	delayslot(8);
+	goto BTarget;
+}
+
+# beq r0,r0 is unconditional.
+:beq src1R,src2R,BTarget is ty=0 & sq=0 & cond=1 & src1=0 & src2=0 & src1R & src2R & BTarget {
+	delayslot(8);
+	goto BTarget;
+}
+:beqsq src1R,src2R,BTarget is ty=0 & sq=1 & cond=1 & src1=0 & src2=0 & src1R & src2R & BTarget {
+	delayslot(8);
+	goto BTarget;
+}
+
+#
+# Compute (TY = 01, spec §5). Assembler order: Src1, Src2, Dest.
+#
+
+:nop is ty=1 & op=4 & func=0x019 & src1=0 & src2=0 & dest=0 { }
+
+:mov src1R,destR is ty=1 & op=4 & func=0x019 & src2=0 & src1R & RS1 & destR { destR = RS1; }
+# Some ESS compilers put the source in Src2 instead (MAME, ES3207/ES3210).
+:mov src2R,destR is ty=1 & op=4 & func=0x019 & src1=0 & src2R & RS2 & destR { destR = RS2; }
+# Both r0: more specific than either mov above, so SLEIGH can choose.
+:mov src1R,destR is ty=1 & op=4 & func=0x019 & src1=0 & src2=0 & src1R & destR { destR = 0; }
+
+:add  src1R,src2R,destR is ty=1 & op=4 & func=0x019 & src1R & src2R & RS1 & RS2 & destR { destR = RS1 + RS2; }
+:sub  src1R,src2R,destR is ty=1 & op=4 & func=0x066 & src1R & src2R & RS1 & RS2 & destR { destR = RS1 - RS2; }
+:subnc src1R,src2R,destR is ty=1 & op=4 & func=0x026 & src1R & src2R & RS1 & RS2 & destR { destR = RS1 + ~RS2; }
+:and  src1R,src2R,destR is ty=1 & op=4 & func=0x023 & src1R & src2R & RS1 & RS2 & destR { destR = RS1 & RS2; }
+:bic  src1R,src2R,destR is ty=1 & op=4 & func=0x00B & src1R & src2R & RS1 & RS2 & destR { destR = RS2 & ~RS1; }
+:not  src1R,destR       is ty=1 & op=4 & func=0x00F & src1R & RS1 & destR               { destR = ~RS1; }
+:or   src1R,src2R,destR is ty=1 & op=4 & func=0x03B & src1R & src2R & RS1 & RS2 & destR { destR = RS1 | RS2; }
+:xor  src1R,src2R,destR is ty=1 & op=4 & func=0x01B & src1R & src2R & RS1 & RS2 & destR { destR = RS1 ^ RS2; }
+
+# Multiply/divide steps using MD.
+:mstart src2R,destR is ty=1 & op=0 & func=0x0E6 & src2R & RS2 & destR {
+	local neg:4 = 0 - RS2;
+	local m:1 = md s< 0;
+	md = md << 1;
+	destR = zext(m) * neg;
+}
+:mstep src1R,src2R,destR is ty=1 & op=0 & func=0x099 & src1R & src2R & RS1 & RS2 & destR {
+	local a:4 = RS1 << 1;
+	local s:4 = a + RS2;
+	local m:1 = md s< 0;
+	md = md << 1;
+	destR = a;
+	if (!m) goto <done>;
+	destR = s;
+	<done>
+}
+:dstep src1R,src2R,destR is ty=1 & op=0 & func=0x166 & src1R & src2R & RS1 & RS2 & destR {
+	local a:4 = (RS1 << 1) | (md >> 31);
+	local o:4 = a - RS2;
+	local neg:1 = o s< 0;
+	md = (md << 1) | zext(!neg);
+	destR = o;
+	if (!neg) goto <done>;
+	destR = a;
+	<done>
+}
+
+# Byte rotates.
+:rotlb src1R,src2R,destR is ty=1 & op=1 & func=0x0C0 & src1R & src2R & RS1 & RS2 & destR {
+	local s:4 = (RS2 & 3) * 8;
+	destR = (RS1 << s) | (RS1 >> (32 - s));
+}
+:rotlcb src1R,src2R,destR is ty=1 & op=1 & func=0x080 & src1R & src2R & RS1 & RS2 & destR {
+	local s:4 = (~RS2 & 3) * 8;
+	destR = (RS1 << s) | (RS1 >> (32 - s));
+}
+
+# Funnel shift: low 32 bits of (Src2:Src1) >> n.
+:sh src1R,src2R,destR,ShAmt is ty=1 & op=1 & shfn=0x04 & src1R & src2R & RS1 & RS2 & destR & ShAmt {
+	local w:8 = (zext(RS2) << 32) | zext(RS1);
+	w = w >> ShAmt;
+	destR = w:4;
+}
+
+:asr src1R,destR,ShAmt is ty=1 & op=1 & shfn=0x02 & src2=0 & src1R & RS1 & destR & ShAmt {
+	local w:8 = sext(RS1);
+	w = w s>> ShAmt;
+	destR = w:4;
+}
+
+# Variable shift left by Src2 (spec §5). Only in later firmware (SPA2100,
+# SPA2102, SPA9000); the direction is a hypothesis.
+:shlv src1R,src2R,destR is ty=1 & op=1 & func=0x180 & src1R & src2R & RS1 & RS2 & destR {
+	destR = RS1 << (RS2 & 31);
+}
+
+#
+# Memory (TY = 10, ES3890 meanings, spec §3). Src2 field is the data register.
+#
+
+:ld   Addr,src2R is ty=2 & op=0 & Addr & src2R       { src2R = *:4 Addr; }
+:st   Addr,src2R is ty=2 & op=2 & Addr & src2R & RS2 { *:4 Addr = RS2; }
+:ldbu Addr,src2R is ty=2 & op=4 & Addr & src2R       { src2R = zext(*:1 Addr); }
+:ldb  Addr,src2R is ty=2 & op=5 & Addr & src2R       { src2R = sext(*:1 Addr); }
+:ldhu Addr,src2R is ty=2 & op=1 & Addr & src2R       { src2R = zext(*:2 Addr); }
+:ldh  Addr,src2R is ty=2 & op=7 & Addr & src2R       { src2R = sext(*:2 Addr); }
+:stb  Addr,src2R is ty=2 & op=3 & Addr & src2R & RS2 { *:1 Addr = RS2:1; }
+:sth  Addr,src2R is ty=2 & op=6 & Addr & src2R & RS2 { *:2 Addr = RS2:2; }
+
+#
+# Compute immediate (TY = 11, spec §6)
+#
+
+:addi src1R,"#"^imm17,src2R is ty=3 & op=4 & src1R & RS1 & imm17 & src2R { src2R = RS1 + imm17; }
+# AND immediate (spec §6). Only in later firmware; the manual's hsc encoding
+# (all other fields zero) is kept below as the more specific match.
+:andi src1R,"#"^imm17,src2R is ty=3 & op=1 & src1R & RS1 & imm17 & src2R { src2R = RS1 & imm17; }
+
+# jspci: target word address Src1 + imm17; Dest (Src2 field) = link.
+# Target and link are computed before the two delay slots.
+
+# Return: Dest = r0 through r31.
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=31 & src1R & imm17 & src2R {
+	local t:4 = (r31 + imm17) * 4;
+	delayslot(8);
+	return [t];
+}
+
+# Jumps: Dest = r0.
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1R & RS1 & imm17 & src2R {
+	local t:4 = (RS1 + imm17) * 4;
+	delayslot(8);
+	goto [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=0 & src1R & imm17 & src2R & JT0 {
+	delayslot(8);
+	goto JT0;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=23 & src1R & imm17 & src2R & JT23 {
+	delayslot(8);
+	goto JT23;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=23 & base23=0 & src1R & imm17 & src2R {
+	local t:4 = (r23 + imm17) * 4;
+	delayslot(8);
+	goto [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=22 & src1R & imm17 & src2R & JT22 {
+	delayslot(8);
+	goto JT22;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=22 & base22=0 & src1R & imm17 & src2R {
+	local t:4 = (r22 + imm17) * 4;
+	delayslot(8);
+	goto [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=26 & src1R & imm17 & src2R & JT26 {
+	delayslot(8);
+	goto JT26;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=26 & base26=0 & src1R & imm17 & src2R {
+	local t:4 = (r26 + imm17) * 4;
+	delayslot(8);
+	goto [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=24 & src1R & imm17 & src2R & JT24 {
+	delayslot(8);
+	goto JT24;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src2=0 & src1=24 & base24=0 & src1R & imm17 & src2R {
+	local t:4 = (r24 + imm17) * 4;
+	delayslot(8);
+	goto [t];
+}
+
+# Calls: Dest != r0.
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1R & RS1 & imm17 & src2R & Link {
+	local t:4 = (RS1 + imm17) * 4;
+	src2R = Link;
+	delayslot(8);
+	call [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=0 & src1R & imm17 & src2R & Link & JT0 {
+	src2R = Link;
+	delayslot(8);
+	call JT0;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=23 & src1R & imm17 & src2R & Link & JT23 {
+	src2R = Link;
+	delayslot(8);
+	call JT23;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=23 & base23=0 & src1R & imm17 & src2R & Link {
+	local t:4 = (r23 + imm17) * 4;
+	src2R = Link;
+	delayslot(8);
+	call [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=22 & src1R & imm17 & src2R & Link & JT22 {
+	src2R = Link;
+	delayslot(8);
+	call JT22;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=22 & base22=0 & src1R & imm17 & src2R & Link {
+	local t:4 = (r22 + imm17) * 4;
+	src2R = Link;
+	delayslot(8);
+	call [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=26 & src1R & imm17 & src2R & Link & JT26 {
+	src2R = Link;
+	delayslot(8);
+	call JT26;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=26 & base26=0 & src1R & imm17 & src2R & Link {
+	local t:4 = (r26 + imm17) * 4;
+	src2R = Link;
+	delayslot(8);
+	call [t];
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=24 & src1R & imm17 & src2R & Link & JT24 {
+	src2R = Link;
+	delayslot(8);
+	call JT24;
+}
+:jspci src1R,"#"^imm17,src2R is ty=3 & op=0 & src1=24 & base24=0 & src1R & imm17 & src2R & Link {
+	local t:4 = (r24 + imm17) * 4;
+	src2R = Link;
+	delayslot(8);
+	call [t];
+}
+
+# Special registers: 1 = PSW, 2 = MD, 4 = PC-4 (read) / PC-1 (write).
+SpecR: "psw"  is spec=1 { export psw; }
+SpecR: "md"   is spec=2 { export md; }
+SpecR: "pcm4" is spec=4 { export pcm4; }
+SpecW: "psw"  is spec=1 { export psw; }
+SpecW: "md"   is spec=2 { export md; }
+SpecW: "pcm1" is spec=4 { export pcm1; }
+
+# hsc ("halt and spontaneously combust", manual): word 0xCFC00000. Not seen
+# in the SPA applications. Modelled as a halt that does not fall through.
+:hsc is ty=3 & op=1 & src1=31 & src2=0 & imm17=0 {
+	halt();
+	goto inst_start;
+}
+
+:movfrs SpecR,destR is ty=3 & op=3 & func3=0 & SpecR & destR { destR = SpecR; }
+:movtos src1R,SpecW is ty=3 & op=2 & func3=0 & src1R & RS1 & SpecW { SpecW = RS1; }
+
+# Exception return through the PC chain. Modelled without delay slots:
+# the usual sequence is jpcrs, jpc, jpc back to back.
+:jpc   is ty=3 & op=5 & func=0x003 {
+	local t:4 = pcm4 * 4;
+	return [t];
+}
+:jpcrs is ty=3 & op=7 & func=0x003 {
+	restoreState();
+	local t:4 = pcm4 * 4;
+	return [t];
+}
+
+# trap: bits 10-3 hold the one's complement of the vector; target word
+# address vector * 8.
+TVec: vec is tvec [ vec = (~tvec) & 0xff; ] { export *[const]:4 vec; }
+
+:trap TVec is ty=3 & op=6 & tbit11=0 & tlow=3 & TVec {
+	trap(TVec);
+}
