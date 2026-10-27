@@ -24,7 +24,7 @@ comes one of two containers, told apart by header field 0x54:
 | 0x54 | Container | Models |
 |---|---|---|
 | 0x80 | **Section container** (§3): three sections stored one after another | SPA1001, SPA2000, SPA3000 (2.x and 3.x) and their recovery releases |
-| 0x40 | **Flash container** (§5): deflated 64 KiB flash blocks, which hold the same three sections | SPA2002, SPA2100, SPA2102, SPA841, SPA941, SPA9000 |
+| 0x40 | **Flash container** (§5): deflated 64 KiB flash blocks, which hold the same three sections | SPA2002, PAP2T, SPA2100, SPA2102, SPA841, SPA941, SPA9000 |
 
 Either way the device ends up with the same sections (§4), each preceded
 by a 0x80-byte entry. The vendor's Windows upgraders embed the image
@@ -106,7 +106,7 @@ The section ends with a short trailing area that looks like a loader stub.
 |---|---|---|---|---|
 | 0x10 | Offset of the stream record | Load address (bytes) | Decompress the stream to the load address | **Verified** |
 | 0x02 | Address | Length | Zero-fill (BSS) | Hypothesis, strongly supported |
-| 0x03 | Bits 29–0: entry point as a **word** address; bit 30: a flag of unknown meaning | | Entry point | Observed. Absent from the application section of SPA2002, SPA841 and SPA941 |
+| 0x03 | Bits 29–0: entry point as a **word** address; bit 30: a flag of unknown meaning | | Entry point | Observed. Absent from the application section of SPA2002, PAP2T, SPA841 and SPA941 |
 | 0x07, 0x05, 0x0A, 0x13 | A word address | | Initial value of code base register r23, r24, r22 or r26 | **Verified**; see [`processor-es3890.md`](processor-es3890.md) §8 |
 | 0x06 | 0x10000 or 0x20000 | | Probably the initial value of r25 | Hypothesis |
 
@@ -136,8 +136,8 @@ The sections of §4 start at the beginning of a block, as a 0x80-byte entry
 followed by the data, and run on into the following blocks. The loader
 finds them by looking for a valid entry at each block start.
 
-Some flash blocks are not part of any section. In SPA2002, SPA841 and
-SPA941, blocks 0x10–0x17 hold about 1,500 functions of uncompressed MIPS-X
+Some flash blocks are not part of any section. In SPA2002, PAP2T, SPA841
+and SPA941, blocks 0x10–0x17 hold about 1,500 functions of uncompressed MIPS-X
 code (Observed). Its load address is not known, and the application's r24
 value (0x03010060) probably points into it. The loader does not load it.
 
@@ -148,5 +148,5 @@ value (0x03010060) probably points into it. The loader does not load it.
 | The 8 bytes before each deflate stream, and word 3 of stream records | Writing images |
 | Bit 30 of the entry record | Boot behaviour |
 | Load address and role of the type 0 section | Boot chain |
-| Load address of the uncompressed flash code in SPA2002, SPA841 and SPA941 | Analysing those images fully |
+| Load address of the uncompressed flash code in SPA2002, PAP2T, SPA841 and SPA941 | Analysing those images fully |
 | Is type 0x06 really r25? | Calling convention |

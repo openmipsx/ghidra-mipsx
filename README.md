@@ -48,6 +48,8 @@ ends up disassembled; the rest is mostly data in the code streams.
 | SPA3000 3.1.20(GW) | sections | 3,117 | 75.6% | 3 | 724 |
 | SPA3000 recovery 2.0.11(GWa) `.exe` | sections | 3,013 | 76.3% | 6 | 654 |
 | SPA2002 3.1.5 | flash | 1,535 | 70.4% | 1 | 835 |
+| PAP2T 5.1.1(LS) | flash | 1,614 | 69.1% | 2 | 849 |
+| PAP2T 5.1.6(LS) (also its `.exe`) | flash | 1,622 | 70.8% | 1 | 849 |
 | SPA841 3.1.4(a) | flash | 1,774 | 68.1% | 4 | 990 |
 | SPA941 4.1.15 | flash | 1,976 | 69.2% | 1 | 997 |
 | SPA2100 3.3.6 | flash | 4,926 | 76.0% | 23 | 973 |
@@ -60,7 +62,7 @@ this repository; the images are the vendors' copyright.
 
 ## Limitations
 
-- **SPA2002, SPA841, SPA941:** these keep about 1,500 more functions as
+- **SPA2002, PAP2T, SPA841, SPA941:** these keep about 1,500 more functions as
   uncompressed code in flash, outside every section. Its load address is
   not known, so the loader does not load it, and the application's calls
   through r24 (which probably point into it) stay unresolved. Their
