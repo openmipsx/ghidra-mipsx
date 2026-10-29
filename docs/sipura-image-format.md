@@ -71,7 +71,7 @@ at the image length (**Verified**).
 |---|---|---|
 | 2 | Packed (§4.2) | Main application |
 | 1 | Packed (§4.2) | A second, smaller program (Hypothesis: recovery or helper image) |
-| 0 | Raw, 0xDF80 bytes in every image | Unknown. It does not decode as MIPS-X; perhaps the second core's code, or data. Load address unknown |
+| 0 | Raw, 0xDF80 bytes in every image | MIPS-X. Two code regions: one decodes at load address 0 (identical across devices, probably boot or loader code); the other is an embedded image with a `0x00060803` header (size in word 1), entry 0x20 past the header. The embedded image's calls go through r23 (set `base23` = `0x10008`) |
 
 ### 4.2 Packed section
 
@@ -147,6 +147,6 @@ value (0x03010060) probably points into it. The loader does not load it.
 |---|---|
 | The 8 bytes before each deflate stream, and word 3 of stream records | Writing images |
 | Bit 30 of the entry record | Boot behaviour |
-| Load address and role of the type 0 section | Boot chain |
+| Role of the type 0 section, and why its embedded image expects r23 = 0x10008 | Boot chain |
 | Load address of the uncompressed flash code in SPA2002, PAP2T, SPA841 and SPA941 | Analysing those images fully |
 | Is type 0x06 really r25? | Calling convention |

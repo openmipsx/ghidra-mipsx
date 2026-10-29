@@ -70,8 +70,16 @@ this repository; the images are the vendors' copyright.
   through r24 (which probably point into it) stay unresolved. Their
   application sections also have no entry point record; run
   `MipsXFindFunctions` to find the code.
-- **Section 0** (raw, 0xDF80 bytes in every image) does not decode as
-  MIPS-X and its load address is unknown. It loads at 0 for inspection.
+- **Section 0** (raw, 0xDF80 bytes in every image) is MIPS-X, not opaque
+  data. It holds two code regions: a block that decodes at load address 0
+  (byte-identical across devices, probably boot or loader code) and an
+  embedded image prefixed by a `0x00060803` header, whose size is the
+  header's second word and whose entry is 0x20 past the header. The loader
+  maps the section at 0; run `MipsXFindFunctions` to find the first
+  region's code, and carve the embedded image out to load it at its own
+  base. The embedded image's calls go through r23 only; set `base23` =
+  `0x10008` (the same constant in every image seen, and its entry dispatches
+  through r23) to resolve all of its functions.
 - The calling convention is partly guessed, so decompiler output for
   arguments and return values may be wrong.
 - The extension is built for **Ghidra 12.2**. Ghidra extensions are tied to
