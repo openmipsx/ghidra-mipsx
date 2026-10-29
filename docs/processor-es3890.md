@@ -181,8 +181,8 @@ the README:
 |---|---|---|---|
 | 0x07 | r23 | All | **Verified** |
 | 0x05 | r24 | Most | **Verified** where its value lies in loaded code. In SPA2002, PAP2T, SPA841 and SPA941 it is 0x03010060, outside every section; see the README's limitations |
-| 0x0A | r22 | SPA2002, PAP2T, SPA2100, SPA2102, SPA841, SPA941, SPA9000 | **Verified** |
-| 0x13 | r26 | SPA2100, SPA2102, SPA9000 | **Verified** |
+| 0x0A | r22 | SPA2002, PAP2T, SPA2100, SPA2102, SPA841, SPA941, SPA942, SPA9000 | **Verified** |
+| 0x13 | r26 | SPA2100, SPA2102, SPA942, SPA9000 | **Verified** |
 | 0x06 | r25 | Most | Hypothesis: calls do not resolve through it, so if it is r25 then r25 is not a code base |
 
 Each base is a word address; the compiler reaches ±0x10000 words around

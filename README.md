@@ -52,6 +52,8 @@ ends up disassembled; the rest is mostly data in the code streams.
 | PAP2T 5.1.6(LS) (also its `.exe`) | flash | 1,622 | 70.8% | 1 | 849 |
 | SPA841 3.1.4(a) | flash | 1,774 | 68.1% | 4 | 990 |
 | SPA941 4.1.15 | flash | 1,976 | 69.2% | 1 | 997 |
+| SPA942 4.1.12(a) | flash | 3,817 | 75.0% | 15 | 1,062 |
+| SPA942 4.1.15 | flash | 3,871 | 75.3% | 25 | 1,062 |
 | SPA2100 3.3.6 | flash | 4,926 | 76.0% | 23 | 973 |
 | SPA2102 5.1.6 | flash | 5,085 | 75.0% | 22 | 986 |
 | SPA9000 3.2.5(c) | flash | 5,227 | 71.6% | 33 | 976 |

@@ -24,7 +24,7 @@ comes one of two containers, told apart by header field 0x54:
 | 0x54 | Container | Models |
 |---|---|---|
 | 0x80 | **Section container** (§3): three sections stored one after another | SPA1001, SPA2000, SPA3000 (2.x and 3.x) and their recovery releases |
-| 0x40 | **Flash container** (§5): deflated 64 KiB flash blocks, which hold the same three sections | SPA2002, PAP2T, SPA2100, SPA2102, SPA841, SPA941, SPA9000 |
+| 0x40 | **Flash container** (§5): deflated 64 KiB flash blocks, which hold the same three sections | SPA2002, PAP2T, SPA2100, SPA2102, SPA841, SPA941, SPA942, SPA9000 |
 
 Either way the device ends up with the same sections (§4), each preceded
 by a 0x80-byte entry. The vendor's Windows upgraders embed the image
@@ -35,10 +35,10 @@ upgraders.
 
 | Offset | Size | Meaning | Status |
 |---|---|---|---|
-| 0x00 | 16 | Magic: an 8-byte model name and `FiRmWaRe`, for example `SpA3000 FiRmWaRe`, `SpA2100fFiRmWaRe`, `KoSmOsF FiRmWaRe` (SPA841), `kOsMoS9 fIrMwArE` (SPA941). The loader accepts any 8 bytes followed by "firmware" in any case | Observed |
+| 0x00 | 16 | Magic: an 8-byte model name and `FiRmWaRe`, for example `SpA3000 FiRmWaRe`, `SpA2100fFiRmWaRe`, `KoSmOsF FiRmWaRe` (SPA841), `kOsMoS9 fIrMwArE` (SPA941), `SkOsMoM fIrMwArE` (SPA942). The loader accepts any 8 bytes followed by "firmware" in any case | Observed |
 | 0x10 | 32 | Zero | Observed |
 | 0x30 | 16 | MD5 over bytes 0 to the end of the table, computed with this field set to zero | **Verified** |
-| 0x40 | 16 | Zero in most images; non-zero in SPA2102 5.1.6, SPA941 4.1.15 and SPA9000 3.2.5(c), where it is included in the MD5 above | Observed |
+| 0x40 | 16 | Zero in most images; non-zero in SPA2102 5.1.6, SPA941 4.1.15, SPA942 4.1.12(a) and 4.1.15, and SPA9000 3.2.5(c), where it is included in the MD5 above | Observed |
 | 0x50 | 4 | 0x80: header size | Observed |
 | 0x54 | 4 | Table entry size: 0x80 or 0x40 (§1) | Observed |
 | 0x58 | 4 | Total image length | **Verified** |
