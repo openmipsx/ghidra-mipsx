@@ -36,8 +36,8 @@ the opposite of the manual's convention.
 | TY | 31–30 | 00 branch, 01 compute, 10 memory, 11 compute-immediate |
 | OP / COND | 29–27 | |
 | Src1 | 26–22 | |
-| Src2 | 21–17 | Holds Dest for loads, `addi` and `jspci` (manual Appendix II "starred" instructions) |
-| Dest | 16–12 | Compute instructions and `movfrs` |
+| Src2 | 21–17 | Holds Dest for loads, `addi`, `jspci` and `movfrs` (manual Appendix II "starred" instructions) |
+| Dest | 16–12 | Compute instructions |
 | Comp Func | 11–0 | Compute instructions |
 | Offset / Immed | 16–0 | 17-bit signed: memory and compute-immediate instructions |
 | SQ | 16 | Branches: 1 = squash the delay slots if the branch is not taken |
@@ -135,7 +135,7 @@ for array indexing. Assemblers should show n, as in the manual's examples
 |---|---|---|
 | 100 | `addi Src1,#imm,Dest` | Dest (Src2 field) = Src1 + SignExtend(imm17) |
 | 000 | `jspci Src1,#imm,Dest` | Jump to word address Src1 + SignExtend(imm17), after two delay slots that always execute. Dest (Src2 field) = jspci word address + 3, which is the return address |
-| 011 | `movfrs Spec,Dest` | Dest (bits 16–12) = special register; Spec in Func bits 2–0 |
+| 011 | `movfrs Spec,Dest` | Dest (Src2 field, bits 21–17) = special register; Spec in Func bits 2–0; bits 16–12 are 0. See "`movfrs` destination" below |
 | 010 | `movtos Src1,Spec` | Special register = Src1 |
 | 101 | `jpc` | Func = 0x003. Jump to PC-4 (exception return chain) |
 | 111 | `jpcrs` | Func = 0x003. As `jpc`, and restores the PSW |
@@ -145,6 +145,25 @@ for array indexing. Assemblers should show n, as in the manual's examples
 
 Special registers: 1 = PSW, 2 = MD, 4 = PC-4 when read and PC-1 when
 written.
+
+**`movfrs` destination (Observed; corrected 2026-10-30).** `movfrs` keeps
+its destination register in the Src2 field, bits 21–17, like the other
+compute-immediate instructions. Bits 16–12 are 0. Earlier versions of this
+document put it in bits 16–12, which was wrong. Evidence:
+
+- Every `movfrs` word in the SPA3000 application (58 of them) has
+  bits 16–12 = 0 and a register number in bits 21–17. For example
+  0xD8040001 is `movfrs psw` into r2.
+- The code only makes sense this way: the interrupt-mask sequence reads
+  the PSW, ORs in bit 4 and writes it back with `movtos` through the
+  register in bits 21–17.
+- **Simulated**: run on a simulator with the old decoding, the
+  application corrupts its PSW within its first 60,000 instructions; with
+  this decoding it runs normally for 15 simulated seconds. About 66,000
+  `movfrs` were executed in its first 20 million cycles.
+
+Assemblers, disassemblers, compilers and simulators written from the old
+text need the same change. `movtos` is unaffected (Src1 is the source).
 
 How the compiler uses `jspci`, all **Verified** in the application:
 

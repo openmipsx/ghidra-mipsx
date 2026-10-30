@@ -383,7 +383,9 @@ SpecW: "pcm1" is spec=4 { export pcm1; }
 	goto inst_start;
 }
 
-:movfrs SpecR,destR is ty=3 & op=3 & func3=0 & SpecR & destR { destR = SpecR; }
+# movfrs keeps Dest in the Src2 field, bits 21-17, like addi; bits 16-12
+# are 0 (spec §2, §6).
+:movfrs SpecR,src2R is ty=3 & op=3 & dest=0 & func3=0 & SpecR & src2R { src2R = SpecR; }
 :movtos src1R,SpecW is ty=3 & op=2 & func3=0 & src1R & RS1 & SpecW { SpecW = RS1; }
 
 # Exception return through the PC chain. Modelled without delay slots:

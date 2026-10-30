@@ -148,6 +148,14 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra test/run-corpus.sh -s "2 1" firmware/*.bin fi
 imports each image into a throwaway project with the installed extension
 and prints one line per image and section, with any loader warnings.
 
+```
+GHIDRA_INSTALL_DIR=/path/to/ghidra test/run-encodings.sh
+```
+
+decodes a few words written from the processor spec with the newest zip
+in `dist/` (installed into a throwaway settings directory, not your own)
+and checks the results. It needs no firmware.
+
 ## Licence
 
 Copyright 2026 Tim Retout <tim@retout.co.uk>
